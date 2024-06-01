@@ -9,8 +9,9 @@ Programs and pipe chains include:
 - ffmpeg
 - SoX &rarr; Helix
 - ffmpeg &rarr; Helix
+
 Methods include:
-- Generic stream redirection, uses a thread of total CPU usage across 2-3 processes
+- Generic stream redirection, (command prompt) uses a thread of total CPU usage across 2-3 processes
 - Asynchronously reading and writing stream blocks to maximize CPU
 - Simply timing dedicated external programs/scripts that perform the same actions
 

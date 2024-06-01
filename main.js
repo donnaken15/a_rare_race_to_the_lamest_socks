@@ -18,8 +18,12 @@ $.throws(false);
 //console.log("2");
 
 console.time('declarations');
-const lsb = n => Math.log2(n & -n); // https://www.geeksforgeeks.org/position-of-rightmost-set-bit/
-const avg = a => a.length > 0 ? a.reduce((p,a) => p+a)/a.length : 0;
+const [lsb, avg, commit, soxi] = [
+	n => Math.log2(n & -n), // https://www.geeksforgeeks.org/position-of-rightmost-set-bit/
+	a => a.length > 0 ? a.reduce((p,a) => p+a)/a.length : 0,
+	c => ("https://github.com/donnaken15/FastGH3/raw/"+c+"/DATA/MUSIC/TOOLS/"),
+	async (f,sw) => (await $`sox --info "-${sw}" -- "${f}"`.text()).trim()
+];
 const shvar = /(?<var>\\?\$([A-Z0-9_]+|{([A-Z0-9_])+}))/gmi;
 const argumentize = (argv, env) =>
 	(typeof argv === 'string') ? argumentize(argv.split(' '), env) : (argv.map((x) =>
@@ -29,8 +33,6 @@ const argumentize = (argv, env) =>
 			.replace(/^"|"$/g, "").trim() // trim quotes
 	));
 //const ffconf = ["-hide_banner","-loglevel","warning"];
-const commit = c => ("https://github.com/donnaken15/FastGH3/raw/"+c+"/DATA/MUSIC/TOOLS/");
-const soxi = async (f,sw) => (await $`sox --info "-${sw}" -- "${f}"`.text()).trim();
 /*
 -t	Show detected file-type
 -r	Show sample-rate
@@ -45,19 +47,32 @@ const soxi = async (f,sw) => (await $`sox --info "-${sw}" -- "${f}"`.text()).tri
 -a	Show file comments (annotations) if available
 */
 const [floor, round, rand, pow] = [Math.floor, Math.round, Math.random, Math.pow];
-const [tS, tE, pad2, fix] = [
-	n => [performance.now(), console.time(n)][0],
-	(t,n) => [performance.now() - t, console.timeEnd(n)][0],
+const fix = (n=0,p=1) => (round(n*pow(10,p))/(p<1?1:pow(10,p)));
+const [tS, tE, pad2, timefmt] = [
+	(n,p2=true) => {
+		if (p2)
+			process.stderr.write('[\x1b[1m'+'?'.repeat(5)+'\x1b[0m] '+n+'\r');
+		console.time(n);
+		var pt = performance.now();
+		return pt;
+	},
+	(t,n) => fix([performance.now() - t, console.timeEnd(n)][0], 6),
 	(t,d='0') => t.toString().padStart(2,d),
-	(n=0,p=1) => (round(n*pow(10,p))/(p<1?1:pow(10,p)))
+	ms => (
+		pad2(Math.floor(ms / 3600000)) + ':' +
+		pad2(Math.floor((ms / 60000) % 60)) + ':' +
+		pad2((ms/1000 % 60).toFixed(0))
+	)
 ]
 function rimraf(f) { // --no-preserve-root
 	rmSync(f, { recursive: true, force: true });
 	rmdirSync(f, { recursive: true, force: true });
 }
-const log = console.log;
-const error = console.error;
-const warn = (t,...a) => console.error("\x1b[33m"+t,...a);
+const [log, error] = [
+	console.log,
+	console.error
+];
+const warn = (t,...a) => error("\x1b[33m"+t+"\x1b[0m",...a);
 /*const stat = (f) =>	{
 	var a = statSync();
 	return {
@@ -84,115 +99,166 @@ rdev: [Getter/Setter],
 size: [Getter/Setter],
 uid: [Getter/Setter],
 */
-const timefmt = ms =>
-	pad2(Math.floor(ms / 3600000)) + ':' +
-	pad2(Math.floor((ms / 60000) % 60)) + ':' +
-	pad2((ms/1000 % 60).toFixed(0));
 const [MODE_STEREO, MODE_JOINT, MODE_DUAL, MODE_MONO] = [0, 1, 2, 3];
-const [NULL, PIPE_TYPED, PIPE_ASYNC, PIPE_REDIR, PIPE_EXTRN] = [
+const [NULL, PIPE_TYPED, PIPE_ASYNC, PIPE_REDIR, PIPE_EXTRN, PIPE_ALL] = [
 	0,	// no flags, default force_pipes value
 	1,	// run through bun's internal shell
 	2,	// run through bun spawn and use async streams
 	4,	// run through bun spawn and plainly redirect stream
 	8,	// run dedicated program, utils is reaplced with core which is
-		// i.e. c128ks, batch or exe, array is purely informative at that point
+		// i.e. c128ks, batch or exe, array is purely informative if this is only set
+	15, // test all of the above
 ];
-const pipe_names = ['Bun shell','Bun async','Bun pipeTo','External'];
+const pipe_names = ['Bun shell','Bun async','Bun pipe2','External'];
 //const path = __dirname + (platform() === 'win32' ? ';' : ':') + process.env.path;
 const uids = [];
 function randid() {
 	var id;
 	var c = 0;
+	const sky = pow(10, 7 /*digits*/);
 	do {
-		id = "--"+floor(rand() * pow(10, 7 /*digits*/)).toString();
-		c++;
+		id = "--"+floor(rand() * sky).toString();
+		if (++c >= sky)
+		{
+			error("Ran out of unique IDs"+("!".repeat(40)));
+			process.exit(999);
+		}
 	} while (uids.indexOf(id) > -1);
 	if (c > 1)
 		warn('randid: collided '+c+' times');
 	uids.push(id);
 	return id;
 }
+const plain1_2 = '"$1" "$2"';
+const	[
+	lame_blob,
+	sox_argv,
+	c128ks_core_batch,
+	c128ks_xblobs
+]	=	[
+	{
+		argv: '--cbr -b $B --resample $R -m j - "$2"',
+		blob: "lame.exe"
+	},	[
+		'--', '$1',
+		'-c', '$C',
+		'-r', '$R',
+		'-S', '--multi-threaded',
+		'-t', 'wav', '--', '-'
+	],	{
+		argv: plain1_2,
+		blob: "c128ks.bat"
+	},	[
+		"libgcc_s_sjlj-1.dll",
+		"libgomp-1.dll",
+		"libwinpthread-1.dll",
+		"zlib1.dll",
+	]
+];
+const c128ks_old = {
+	core: c128ks_core_batch,
+	excfmts: [ "opus" ],
+	pipe: PIPE_ALL,
+};
+const c128ks_opus_before_helix = [
+	{ name: "SoX 14.4.2 (m-ab-s)", // built from media-autobuild-suite
+		argv: sox_argv, blob: "sox.exe" },
+	{ name: "LAME 3.98", ...lame_blob }, // dated 2008
+];
+const helix_blob = {
+	argv: '- "$2" -B$BH -M1 -u2 -q1',
+	blob: "lame.exe"
+};
 const data = {
 	// need some way to allow this to be in a separate file like
 	// an actual JSON file but have these variables used
 	config: {
-		runs: 3//times to encode and average using
+		runs: 8//times to encode and average using
 		, vars: { // shell environment like variables
 			R: 44100, B: 128, M: MODE_JOINT
 		},
+		workingdir: 'C:\\soxtest',//__dirname + '\\test\\',
 		// override settings for individual instances
 		force_pipes: NULL,
 		force_reconvert: null,
-		workingdir: __dirname + '\\test\\'
+		all_pipes_at_once: false
+		// i forgot, the encoders are going to overwrite each other's output lol
+		// and of course four tasks at once will make all them slower
 	}, chains: [
+		/**/
 		{ /// chain schema almost :/
-			name: "c128ks July 4, 2021 (Non-batch, no MP3)",
+			name: "c128ks Jul 4, 2021",
 			date: "2021-07-04",
 			utils: [
 				{ name: "SoX 14.4.0", // 2012 version
-					argv: [
-						'--', '$1', '-c', '$C',
-						'-r', '$R', '-S',
-						'-C', '$B', '--multi-threaded',
-						'-t', 'wav', '--', '-'
-					],
+					argv: sox_argv,
 					blob: "sox.exe" },
-				{ name: "LAME 3.100.1",
-					argv: '--cbr -b $B --resample $R -m j - "$2"',
-					blob: "lame.exe" },
+				{ name: "LAME 3.100.1", ...lame_blob },
 			],
-			//core: {
-			//	argv: '"$1" "$2"',
-			//	blob: "c128ks.bat"
-			//},
+			//core: c128ks_core_batch,
 			snapshot: "20ac219", // if specified, reference commit where this chain exists
 			//basepath: commit("20ac219"), // if not specified, use commit(snapshot)
 			extrablobs: [
 				"lame_enc.dll",
-				"libgcc_s_sjlj-1.dll",
-				"libgomp-1.dll",
-				//"libmad-0.dll",
-				//"libmp3lame-0.dll",
-				"libwinpthread-1.dll",
-				"zlib1.dll"
+				"libmad-0.dll",
+				"libmp3lame-0.dll",
+				...c128ks_xblobs
 			],
-			excfmts: [ "opus", "mp3" ], // exclude decoding formats,
-			// because i did not have a sox build with opus dec in 2021
-			///////// and libmad isn't supposed to be included because LAME already <-- got alzheimers, can't confirm rn
-			///////// decodes MP3, as set in the batch script, and SoX does it slower
-			pipe: PIPE_ASYNC | PIPE_REDIR, // pipe modes to test, flags
-		}, {
-			name: "c128ks July 4, 2021 (Batch)",
-			date: "2021-07-04",
+			...c128ks_old
+			//excfmts: [ "opus" ], // exclude decoding formats,
+			//// because i did not have a sox build with opus dec in 2021
+			//pipe: PIPE_ALL, // pipe modes to test, flags
+		},/**/
+		/**/
+		{
+			name: "c128ks May 23, 2022",
+			date: "2022-05-23",
 			utils: [
-				{ name: "SoX 14.4.0",
+				{ name: "SoX 14.3.1",
+					// 2010, got this from some zip, probably sourceforge
 					argv: [
-						'--', '$1', '-c', '$C',
-						'-r', '$R', '-S',
-						'-C', '$B', '--multi-threaded',
+						'$1',
+						'-c', '$C',
+						'-r', '$R',
+						'-S', '--multi-threaded',
 						'-t', 'wav', '--', '-'
 					],
 					blob: "sox.exe" },
-				{ name: "LAME 3.100.1",
-					argv: '--cbr -b $B --resample $R -m j - "$2"',
-					blob: "lame.exe" },
+				{ name: "LAME 3.99.2.5", ...lame_blob },
 			],
-			core: {
-				argv: '"$1" "$2"',
-				blob: "c128ks.bat"
-			},
-			snapshot: "20ac219",
+			snapshot: "54a7123", // stupid me
 			extrablobs: [
-				"lame_enc.dll",
-				"libgcc_s_sjlj-1.dll",
-				"libgomp-1.dll",
-				"libmad-0.dll",
-				"libmp3lame-0.dll",
-				"libwinpthread-1.dll",
-				"zlib1.dll"
+				"libmad.dll",
+				...c128ks_xblobs
 			],
-			excfmts: [ "opus" ],
-			pipe: PIPE_EXTRN,
+			...c128ks_old
+		},/**/
+		{
+			name: "c128ks Jun 20, 2022",
+			date: "2022-06-20",
+			utils: c128ks_opus_before_helix, // sox built from media-autobuild-suite
+			core: c128ks_core_batch, // lame dated 2008
+			snapshot: "f13d001",
+			pipe: PIPE_ALL
+		},
+		{
+			name: "c128ks Nov 21, 2022",
+			date: "2022-11-21",
+			utils: c128ks_opus_before_helix,
+			core: c128ks_core_batch,
+			snapshot: "6540be6", // updated batch
+			pipe: PIPE_ALL
+		},
+		{
+			name: "c128ks Jan 15, 2023",
+			date: "2022-01-15",
+			utils: [
+				{ name: "SoX 14.4.2 (m-ab-s)", argv: sox_argv, blob: "sox.exe" },
+				{ name: "Helix 5.2.1", ...helix_blob }, // 1995-2005 software rebuilt by maik merten 2022
+			],
+			core: c128ks_core_batch,
+			snapshot: "6540be6", // updated batch
+			pipe: PIPE_ALL
 		},
 	], samples: [ // audio to test
 		{
@@ -204,6 +270,108 @@ const data = {
 		},
 	]
 };
+//console.log(data);
+//throw 'asdf';
+const pipe_runners = [
+	// ================       SHELL       ================
+	async (mode,proc,utils) => {
+		'use strict';
+		const srg8 = -444; // surrogate, probably the term i'm trying to remember
+		const esc = [...utils[0], srg8, ...utils[1]];
+		const list = esc.map(a =>
+			(a !== srg8 && typeof a !== srg8) ? ($.escape(a.replace('\\','\\\\'))) : '|'
+		).join(' '); // :/
+		const cmd = await $`${{raw: list}}`.quiet();
+	},
+	// ================    ASYNCHRONOUS   ================
+	async (mode,proc) => {
+		'use strict';
+		var dec_done = false;
+		var enc_done = false;
+		var done = false;
+		var bp = [0, 0];
+		var decoded_blocks = [];
+		///dt = tS('decoder');
+		var pipe = [
+			proc[0].stdout.getReader(),
+			proc[1].stdin
+		];
+		var dect = (async () => { // async decoder reader
+			while (true)
+			{
+				var r = (await pipe[0].read());
+				if (r.done)
+				{
+					///dt = tE(dt, 'decoder');
+					pipe[0].releaseLock();
+					await proc[0].stdout.cancel();
+					dec_done = true;
+					return;
+				}
+				decoded_blocks.push(r.value);
+				bp[0]++;
+			}
+		})();
+		while (!done) // encode available bytes from above
+		{
+			// for the length that the output isn't read from ffmpeg,
+			// ffmpeg continues to build up the buffer that will get read eventually,
+			// so instantly reading twice gets like 20-100 bytes, but waiting
+			// a little will make it spit out a few hundred kb to few mb
+			if (decoded_blocks.length < 1)
+			{
+				if (dec_done)
+				{
+					pipe[1].close();
+					await proc[1].exited;
+					enc_done = true;
+					done = true;
+				}
+				await sleep(0);
+			}
+			else
+				while (decoded_blocks.length > 0)
+				{
+					var block = decoded_blocks.shift();
+					try {
+						pipe[1].write(block);
+						bp[1]++;
+					}
+					catch (ex) {
+						error(ex);
+						error("retrying...");
+						decoded_blocks.unshift(block);
+					}
+				}
+			if (!data.config.all_pipes_at_once)
+				if (Math.floor(performance.now()) % 10 === 0)
+					process.stdout.write(' '.repeat(25)+'-'.repeat(20)+"  blocks processed: "+bp[0]+", "+bp[1]+" \r");
+			//await sleep(13);
+		}
+		await dect; // probably pointless
+	},
+	// ================ PLAIN REDIRECTION ================
+	async (mode,proc) => {
+		'use strict';
+		///dt = tS('decoder');
+		const die = proc[1].stdin;
+		var pipe = [
+			proc[0].stdout,
+			new WritableStream({ // brain damage
+				start: () => die.start(),
+				write: (chnk) => die.write(chnk),
+				close: () => die.close(),
+				abort: () => die.abort(),
+			}, { size: () => 1 })
+		]
+		pipe[0].pipeTo(pipe[1]);
+		///dt = tE(dt, 'decoder');
+	},
+	// ================  EXTERNAL RUNNER  ================
+	async (mode,proc,utils,core,env) => await Bun.spawn(
+		[core.blob, ...argumentize(core.argv, env)], {stderr: "pipe"} // TODO: print if non-zero
+	).exited,
+];
 var res = [];
 console.timeEnd('declarations');
 
@@ -217,12 +385,12 @@ $.throws(true);
 	const [conf, samps, chains, outpath] = [
 		data.config, data.samples, data.chains, wd + randid()
 	];
-	var tmpaud = wd + randid();
 	if (!existsSync(wd))
 		mkdirSync(wd, {recursive: true});
 	for (var si = 0, s; s = samps[si], si < samps.length; si++)
 	{
-		log(s.name);
+		var tmpaud = wd + randid();
+		log(s.name.padStart(35,' ').padStart(80,'-'));
 		var sr = await fetch(s.source);
 		if (!sr.ok)
 		{
@@ -259,7 +427,7 @@ $.throws(true);
 					);
 					src[type] = {
 						file: rid
-					}
+					};
 					stl.push(type);
 				}
 			}
@@ -309,21 +477,22 @@ $.throws(true);
 			const types_supported = chain_test.types;
 			const tmpdir = wd + randid() + '\\';
 			mkdirSync(tmpdir, {recursive: true});
-			log('downloading blobs from '+c.name);
-			for (var i = 0; i < c.extrablobs.length; i++)
-			{
-				var fn = c.extrablobs[i];
-				var blob = blobpath + fn;
-				var dl = await fetch(blob);
-				if (!dl.ok)
+			log(('downloading blobs from '+c.name).padStart(60,' ').padStart(80,'-'));
+			if (c.hasOwnProperty('extrablobs'))
+				for (var i = 0; i < c.extrablobs.length; i++)
 				{
-					error('chain blob is missing: '+blob);
-					rimraf(tmpdir);
-					continue next_chain;
+					var fn = c.extrablobs[i];
+					var blob = blobpath + fn;
+					var dl = await fetch(blob);
+					if (!dl.ok)
+					{
+						error('chain blob is missing: '+blob);
+						rimraf(tmpdir);
+						continue next_chain;
+					}
+					var file = await dl.arrayBuffer();
+					writeFileSync(tmpdir + fn, file);
 				}
-				var file = await dl.arrayBuffer();
-				writeFileSync(tmpdir + fn, file);
-			}
 			var core = null;
 			var exclude_pipes = NULL;
 			if (c.hasOwnProperty('core'))
@@ -348,9 +517,10 @@ $.throws(true);
 			var modes = ((conf.force_pipes !== NULL) ? conf.force_pipes : c.pipe);
 			if ((conf.force_pipes | modes & PIPE_EXTRN) && core === null)
 			{
-				error('chain '+c.name+' enables external pipe runner/program but is not specified');
+				error('chain '+c.name+' enables external pipe runner/program but has no path to it defined');
 			}
-			modes & ~exclude_pipes;
+			modes &= (~exclude_pipes);
+			log(('running '+c.utils[0].name+" >>>> "+c.utils[1].name).padStart(80,'-'));
 			const proc_paths = [];
 			for (var i = 0; i < 2; i++)
 			{
@@ -376,148 +546,85 @@ $.throws(true);
 			
 			for (var __type = 0, type; (type = stl[__type]), __type < stl.length; __type++)
 			{
-				if (c.excfmts.indexOf(type) > -1)
-				{
-					error('chain '+c.name+' does not support type '+type);
-					continue;
-				}
+				if (c.hasOwnProperty('excfmts'))
+					if (c.excfmts.indexOf(type) > -1)
+					{
+						error('chain '+c.name+' does not support type '+type);
+						chain_test.runs[type] = null;
+						// undefined/null/hasOwnProperty checks piss me off for the different precise ways to check if an object is valid
+						continue;
+					}
 				types_supported.push(type);
 				log('processing ' + type);
 				
 				//log(pipe.toString(2).padStart(4,'0'));
-				var dt, et;
 				var utils = [];
 				var env = {
 					"1": src[type].file, "2": outpath, ...conf.vars,
 					"C": conf.vars.M === MODE_MONO ? 1 : 2,
+					"BH": conf.vars.B >> 1,
 				};
 				for (var i = 0; i < 2; i++)
 					utils.push([proc_paths[i], ...argumentize(c.utils[i].argv, env)]);
 				//log(utils);
+				//log(env);
 				
 				const runs = [
 					[], [], [], []
 				];
-				// TODO: print error stream if exited with non-zero
 				for (var i = 1; i <= conf.runs; i++)
 				{
-					var ttext = 'run '+(i).toString();	
-					var proc, pipe;
-					//if (modes & (PIPE_REDIR | PIPE_ASYNC)) // replace with === 0 check once all modes are implemented
-					//	proc = [
-					//		Bun.spawn(utils[0], {stdin: null, stderr: null}),
-					//		Bun.spawn(utils[1], {stdin: "pipe", stdout: null, stderr: null})
-					//	];
-					// make function array and loop through flags
-					if (modes & PIPE_ASYNC)
+					var tasks = [];
+					for (var m = 0; m < 4; m++) // nether, hyper, mega, super lol
 					{
-						var dec_done = false;
-						var enc_done = false;
-						var done = false;
-						var bp = [0, 0];
-						var decoded_blocks = [];
-						///dt = tS('decoder');
-						et = tS(ttext);
-						//log('GO!');
-						proc = [
-							Bun.spawn(utils[0], {stdin: null, stderr: null}),
-							Bun.spawn(utils[1], {stdin: "pipe", stdout: null, stderr: null})
-						];
-						pipe = [
-							proc[0].stdout.getReader(),
-							proc[1].stdin
-						];
-						//log(proc);
-						// i hate this language so hard
-						var dect = (async () => { // async decoder reader
-							while (true)
-							{
-								var r = (await pipe[0].read());
-								if (r.done)
+						if (!(modes >> m & 1))
+							continue;
+						const task =  (async (i, m) => {
+							try {
+								var proc;
+								var use_proc = ((1 << m) & (PIPE_ASYNC | PIPE_REDIR)) !== 0;
+								if (use_proc)
 								{
-									///dt = tE(dt, 'decoder');
-									dec_done = true;
-									return;
+									proc = [
+										Bun.spawn(utils[0], {stdin: null, stderr: "pipe"}),
+										Bun.spawn(utils[1], {stdin: "pipe", stdout: null, stderr: "pipe"})
+									];
 								}
-								decoded_blocks.push(r.value);
-								bp[0]++;
-							}
-						})();
-						while (!done) // encode available bytes from above
-						{
-							// for the length that the output isn't read from ffmpeg,
-							// ffmpeg continues to build up the buffer that will get read,
-							// so instantly reading twice gets like 20-100 bytes, but waiting
-							// a little will make it spit out a few hundred kb to few mb
-							if (decoded_blocks.length < 1)
-							{
-								if (dec_done)
+								
+								var ttext = 'run '+i.toString()+' '+pipe_names[m];
+								var et = tS(ttext, !conf.all_pipes_at_once);
+								
+								//log(pipe_names[m]);
+								await pipe_runners[m](1 << m, proc, utils, core, env);
+								// run all modes at once? trollface // i did it.....
+								if (use_proc)
 								{
-									pipe[1].close();
+									await proc[0].exited;
 									await proc[1].exited;
-									enc_done = true;
-									done = true;
 								}
-								await sleep(0);
+								
+								et = tE(et, ttext);
+								runs[m].push(et);
+								//process.stdout.write('\n');
+								//log((await $`ffprobe -hide_banner test.mp3 2>&1`.text()).trim());
 							}
-							else
-								while (decoded_blocks.length > 0)
-								{
-									var block = decoded_blocks.shift();
-									try {
-										pipe[1].write(block);
-										bp[1]++;
-									}
-									catch (ex) {
-										error(ex);
-										error("retrying...");
-										decoded_blocks.unshift(block);
-									}
-								}
-							if (Math.floor(performance.now()) % 10 === 0)
-								process.stdout.write(' '.repeat(20)+'-'.repeat(20)+"  blocks processed: "+bp[0]+", "+bp[1]+" \r");
-							//await sleep(13);
-						}
-						await dect; // probably pointless
-						et = tE(et, ttext);
-						runs[lsb(PIPE_ASYNC)].push(et);
-						//process.stdout.write('\n');
-						//log((await $`ffprobe -hide_banner test.mp3 2>&1`.text()).trim());
+							catch (e) {
+								console.error(e);
+								if (use_proc)
+									for (var j = 0; j < 2; j++)
+										console.error(await Bun.readableStreamToText(proc[j].stderr));
+							}
+						})(i, m);
+						if (!conf.all_pipes_at_once)
+							await task;
+						else
+							tasks.push(task);
 					}
-					if (modes & PIPE_REDIR)
-					{
-						///dt = tS('decoder');
-						et = tS(ttext);
-						//log('GO!');
-						proc = [
-							Bun.spawn(utils[0], {stdin: null, stderr: null}),
-							Bun.spawn(utils[1], {stdin: "pipe", stdout: null, stderr: null})
-						];
-						const die = proc[1].stdin;
-						pipe = [
-							proc[0].stdout,
-							new WritableStream({ // brain damage
-								start: () => die.start(),
-								write: (chnk) => die.write(chnk),
-								close: () => die.close(),
-								abort: () => die.abort(),
-							}, { size: () => 1 })
-						]
-						pipe[0].pipeTo(pipe[1]);
-						///dt = tE(dt, 'decoder');
-						await proc[0].exited;
-						await proc[1].exited;
-						et = tE(et, ttext);
-						runs[lsb(PIPE_REDIR)].push(et);
-					}
-					if (core !== null)
-						if (modes & PIPE_EXTRN)
-						{
-							et = tS(ttext);
-							Bun.spawnSync([core.blob, ...argumentize(core.argv, env)]);
-							et = tE(et, ttext);
-							runs[lsb(PIPE_REDIR)].push(et);
-						}
+					if (conf.all_pipes_at_once)
+						await Promise.allSettled(tasks);
+					console.log('  '+'-'.repeat(20)+'  ');
+					
+					
 					Bun.gc(false);
 					//log(heapStats());
 				}
@@ -554,7 +661,8 @@ $.throws(true);
 		res.push(test);
 	}
 }
-log(inspect(res, true, 16, true));
+//log(heapStats());
+log(inspect(res, false, 16, true));
 
 
 
