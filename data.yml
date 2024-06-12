@@ -1,0 +1,251 @@
+
+---
+	# this sucks
+	# I'M USING TABS, I DON'T GIVE A F***!!!!!!!!!
+	# editing this in nano because n++ makes all this red
+	# actually, now just using UDL, and i'm cringing
+	consts:
+		- &MODE_STEREO
+			M: 0
+		- &MODE_JOINT
+			M: 1
+		- &MODE_DUAL
+			M: 2
+		- &MODE_MONO
+			M: 3
+		- &NONE
+			force_pipes: 0
+			pipe: 0
+		- &PIPE_TYPED
+			force_pipes: 1
+			pipe: 1
+		- &PIPE_ASYNC
+			force_pipes: 2
+			pipe: 2
+		- &PIPE_REDIR
+			force_pipes: 4
+			pipe: 4
+		- &PIPE_EXTRN
+			force_pipes: 8
+			pipe: 8
+		- &PIPE_ALL
+			force_pipes: 15
+			pipe: 15
+		- &lame_blob
+			argv: &lame_argv
+				'--cbr -b $B --resample $R -m j - "$2"'
+			blob: 'lame.exe'
+		- &sox_blob
+			argv: &sox_argv
+				'-- $1 -c $C -r $R -S --multi-threaded -t wav -'
+			blob: 'sox.exe'
+		- &helix_blob
+			argv: '- "$2" -B$BH -M$M -u2 -q1'
+			blob: 'helix.exe'
+		- &c128ks_old
+			core: &c128ks_core_batch
+				argv: &plain1_2
+					'"$1" "$2"'
+				blob: 'c128ks.bat'
+			excfmts: # exclude decoding formats
+				- opus
+			# because i didn't have a sox build with opus dec in 2021
+			#pipe: 0xF # pipe modes to test
+		- &c128ks_xblobs
+			- libgcc_s_sjlj-1.dll
+			- libgomp-1.dll
+			- libwinpthread-1.dll
+			- zlib1.dll
+	data:
+		# the structuring of this looks way more messy
+		# despite how human readable this ml **tries** to be
+		config:
+			runs: 6 # times to encode and average using
+			# shell environment like variables
+			vars:
+				R: 44100
+				B: 128
+				<<: *MODE_JOINT
+			workingdir: c:/soxtest
+			# override settings for individual instances
+			#<<: *PIPE_ALL
+			#force_pipes: 0xE
+			force_reconvert:
+				- mp3
+				- ogg
+				- opus
+			all_pipes_at_once: false
+			# i forgot, the encoders are going to overwrite each other's output lol
+			# and of course four tasks at once will make them all slower
+		chains:
+			-
+				# chain schema almost :/
+				name: c128ks Jul 4, 2021
+				date: 2021-07-04
+				utils:
+					-
+						# 2012 version
+						name: SoX 14.4.0,
+						<<: *sox_blob
+					-
+						name: LAME 3.100.1,
+						<<: *lame_blob
+				enabled: false
+				# if specified, reference commit where this chain exists
+				# these tools will always be found in DATA/MUSIC of the repo
+				snapshot: 20ac219
+				#basepath: #if not specified, use commit(snapshot)
+				extrablobs:
+					- lame_enc.dll
+					- libmad-0.dll
+					- libmp3lame-0.dll
+					- *c128ks_xblobs # hate this
+				# WHY IS THIS ONLY FOR ASSOC ARRAYS INSTEAD OF LISTS?!?!
+				<<: *c128ks_old
+			-
+				name: c128ks May 23, 2022
+				date: 2022-05-23
+				utils:
+					-
+						# 2010, got this from some zip, probably sourceforge
+						name: SoX 14.3.1
+						<<: *sox_blob
+					-
+						name: LAME 3.99.2.5
+						<<: *lame_blob
+				enabled: false
+				snapshot: 54a7123
+				extrablobs:
+					- libmad.dll
+					- *c128ks_xblobs
+				<<: *c128ks_old
+			-
+				name: c128ks Jun 20, 2022
+				date: 2022-06-20
+				utils: &c128ks_opus_before_helix
+					-	&sox_latest
+						# built from media-autobuild-suite
+						name: SoX 14.4.2 (m-ab-s)
+						<<: *sox_blob
+					-
+						# dated 2008
+						name: LAME 3.98
+						<<: *lame_blob
+				core: *c128ks_core_batch
+				enabled: false
+				snapshot: f13d001
+			-
+				name: c128ks Nov 21, 2022
+				date: 2022-11-21
+				utils: *c128ks_opus_before_helix
+				core: *c128ks_core_batch # updated batch
+				# sox decodes and encodes on its own in batch l:l
+				#enabled: false
+				snapshot: 6540be6
+			-
+				name: c128ks Jan 15, 2023
+				date: 2023-01-15
+				utils: &c128ks_2023
+					-	*sox_latest
+					-
+						<<: *helix_blob
+						name: Helix 5.2.1
+				core: *c128ks_core_batch
+				#enabled: false
+				snapshot: 3cb08ad
+				#pipe: 0xE
+				# helix won't close in bun shell on WSL,
+				# but WSL shell runs the command and exits just fine
+				# screw linux
+			-
+				name: c128ks Nov 30, 2023 - ffmpeg
+				date: 2023-11-25
+				utils:
+					-	&ffmpeg_blob
+						name: ffmpeg
+						argv: '-hide_banner -i $1 -ac $C -ar $R -f wav pipe:'
+						blob: 'ffmpeg'
+						local: true
+						# no dl because gyan doesn't freaking upload raw exe
+					-
+						<<: *helix_blob
+						name: Helix 5.2.1
+				core: *c128ks_core_batch
+				extrablobs:
+					- sox.exe
+				#enabled: false
+				snapshot: 1c83ba9
+			-
+				name: c128ks Dec 25, 2023
+				date: 2023-12-25
+				utils: &c128ks_2023
+					-	*sox_latest
+					-	&helix_blob2
+						<<: *helix_blob
+						name: Helix 5.2.1
+						argv: '- $2 -B$BH -M$M -X0 -U2 -Qquick -A1 -D -EC'
+				core: *c128ks_core_batch
+				extrablobs:
+					- sox.exe
+				#enabled: false
+				snapshot: 02de88e
+			-
+				name: c128ks Dec 25, 2023 - ffmpeg
+				date: 2023-12-25
+				utils: &c128ks_ff
+					-	*ffmpeg_blob
+					-	*helix_blob2
+				core: *c128ks_core_batch
+				extrablobs:
+					- sox.exe
+				#enabled: false
+				snapshot: 02de88e
+			-
+				name: c128ks new core
+				date: 2023-12-30
+				utils: *c128ks_ff
+				core: &c128ks_new
+					argv: *plain1_2
+					blob: 'c128ks.exe'
+					broken: true
+				#enabled: false
+				snapshot: 16cfd7d
+			-
+				name: c128ks new core, VC++ helix
+				date: 2024-05-04
+				utils:
+					-	*ffmpeg_blob
+					-	*helix_blob2
+				core: *c128ks_new
+				basepath: 'https://donnaken15.com/fastgh3/c128ks_new'
+				pipe: 14
+		samples:
+			# audio to test
+			-
+				# my trusty loyal audio file(s)
+				name: 'Aanguish'
+				source: 'https://donnaken15.com/test.ogg'
+				#source: https://github.com/donnaken15/charts/raw/master/Venetian%20Snares%20-%20Aanguish/song.ogg
+				#reconvert_to:
+				#- wav
+				#- mp3
+				#- opus
+			#-
+			#	name: 'Szycag'
+			#	source: 'https://donnaken15.com/test2.ogg'
+			#	#source: https://github.com/donnaken15/charts/raw/master/Venetian%20Snares%20-%20Szycag/song.ogg
+...
+
+
+
+
+
+
+
+
+
+
+
+
+
+
